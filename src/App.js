@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import io from "socket.io-client";
 import "./App.css";
+import io from "socket.io-client";
 
 
 const card = {
@@ -12,63 +12,70 @@ const card = {
   value: 5,
 }
 
-const sessions = {
-  sessionId123: {
-    users: [
-      {
-        socketId: "socketId1",
-        userId: "userId1",
-        username: "PlayerOne",
-        isOnline: true,
-        score: 100,
-        lastRound: 1,
-        imageName: "player1.png",
-        rank: 1,
-        answerState: "notAnswered",
-        lastQuestionScore: 0,
-        streak: { score: 5, index: 2, streakIndex: 1 },
-        isHost: true,
-      },
-      {
-        socketId: "socketId2",
-        userId: "userId2",
-        username: "PlayerTwo",
-        isOnline: true,
-        score: 80,
-        lastRound: 1,
-        imageName: "player2.png",
-        rank: 2,
-        answerState: "notAnswered",
-        lastQuestionScore: 0,
-        streak: { score: 3, index: 1, streakIndex: -1 },
-        isHost: false,
-      },
-      {
-        socketId: "socketId1",
-        userId: "123",
-        username: "PlayerThree",
-        isOnline: true,
-        score: 100,
-        lastRound: 1,
-        imageName: "player3.png",
-        rank: 3,
-        answerState: "notAnswered",
-        lastQuestionScore: 0,
-        streak: { score: 5, index: 2, streakIndex: 1 },
-        isHost: true,
-      },
-    ],
-    round: 0,
-    gameStatus: "running",
-    hasPlayed: false,
-    category: { name: "General Knowledge", value: "general" },
-    subcategory: { name: "Science", value: "science" },
-    level: { name: "Easy", value: "easy" },
-  },
+const card1 = {
+  id: "card456",
+  name: "Hide Question",
+  appliesTo: "opponent",
+  type: "time-manipulator",
+  ability: "add",
+  value: 10,
 }
 
-
-
+// const sessions = {
+//   sessionId123: {
+//     users: [
+//       {
+//         socketId: "socketId1",
+//         userId: "userId1",
+//         username: "PlayerOne",
+//         isOnline: true,
+//         score: 100,
+//         lastRound: 1,
+//         imageName: "player1.png",
+//         rank: 1,
+//         answerState: "notAnswered",
+//         lastQuestionScore: 0,
+//         streak: { score: 5, index: 2, streakIndex: 1 },
+//         isHost: true,
+//       },
+//       {
+//         socketId: "socketId2",
+//         userId: "userId2",
+//         username: "PlayerTwo",
+//         isOnline: true,
+//         score: 80,
+//         lastRound: 1,
+//         imageName: "player2.png",
+//         rank: 2,
+//         answerState: "notAnswered",
+//         lastQuestionScore: 0,
+//         streak: { score: 3, index: 1, streakIndex: -1 },
+//         isHost: false,
+//       },
+//       {
+//         socketId: "socketId1",
+//         userId: "123",
+//         username: "PlayerThree",
+//         isOnline: true,
+//         score: 100,
+//         lastRound: 1,
+//         imageName: "player3.png",
+//         rank: 3,
+//         answerState: "notAnswered",
+//         lastQuestionScore: 0,
+//         streak: { score: 5, index: 2, streakIndex: 1 },
+//         isHost: true,
+//       },
+//     ],
+//     round: 0,
+//     gameStatus: "running",
+//     hasPlayed: false,
+//     category: { name: "General Knowledge", value: "general" },
+//     subcategory: { name: "Science", value: "science" },
+//     level: { name: "Easy", value: "easy" },
+//   },
+// }
+let sessions
 
 
 const SOCKET_URL = "http://localhost:5000/"; // Updated port to match
@@ -95,7 +102,10 @@ function App() {
   const joinRoom = () => {
     if (username && roomId) {
       socket.emit("joinRoom", {username, sessionId:roomId});
-      socket.emit("use-card", card, roomId, "66d444efd4441a8d7233ebae", sessions)
+      console.log("Yipppie")
+      socket.emit("isReadyNow", {sessionId:roomId})
+
+      // socket.emit("use-card", card, roomId, "66d444efd4441a8d7233ebae", sessions)
     } else {
       alert("Please enter both username and room ID");
     }
@@ -103,9 +113,17 @@ function App() {
 
   // Function to start the game
   const startGame = () => {
-    socket.emit("startGame", roomId);
   };
+  
+  //Function to emit useAbility event
+  const useAbility = ()=>{
+    socket.emit("startGame", roomId);
+    socket.emit("use-card", card, roomId,"66d444efd4441a8d7233ebae", sessions)
+  }
 
+  const onAnswer = ()=>{
+    socket.emit("onAnswer", {sessionId:roomId, answer:true})
+  }
 
   // Ping button handler
   const handlePing = () => {
@@ -114,7 +132,7 @@ function App() {
       message: "You've been pinged!",
     });
   };
-
+   
   useEffect(() => {
     // Handle joining room confirmation
     socket.on("joinedRoom", () => {
@@ -123,8 +141,10 @@ function App() {
     });
 
     // Handle user list updates
-    socket.on("updateUserList", (users) => {
+    socket.on("roomUsers", (users) => {
+      sessions = users
       setUsers(users);
+      // console.log(sessions)
     });
 
     // Handle receiving a new question
@@ -145,6 +165,9 @@ function App() {
       setTimeLeft(timeLeft);
     });
 
+    socket.on("card-used", (text)=>{
+      console.log("-------------card-used------------")
+    })    
     // Handle game over notifications
     socket.on("gameOver", (message) => {
       alert(message);
@@ -153,7 +176,7 @@ function App() {
 
     return () => {
       socket.off("joinedRoom");
-      socket.off("updateUserList");
+      socket.off("roomUsers");
       socket.off("newQuestion");
       socket.off("pinged");
       socket.off("timerUpdate");
@@ -188,10 +211,12 @@ function App() {
           </button>
         )}
         <ul id="userList">
-          {users.map((user, index) => (
+          {users?.users?.map((user, index) => (
             <li key={index}>{user.username}</li>
           ))}
         </ul>
+        <button onClick= {useAbility}>Use Ability</button>
+        <button onClick= {onAnswer}>Answer</button>
       </div>
       <div id="game" style={{ display: isInLobby ? "none" : "block" }}>
         <h2 id="question">{question}</h2>
