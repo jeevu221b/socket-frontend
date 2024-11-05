@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
 import io from "socket.io-client";
+import Login from "./components/Login";
+import { useLogin } from "./contexts/LoginContext";
 
 
 const card = {
@@ -13,11 +15,11 @@ const card = {
 }
 
 const card1 = {
-  id: "card456",
+  id: "card345",
   name: "Hide Question",
   appliesTo: "opponent",
-  type: "time-manipulator",
-  ability: "add",
+  type: "power-card",
+  ability: "subtract",
   value: 10,
 }
 
@@ -75,20 +77,96 @@ const card1 = {
 //     level: { name: "Easy", value: "easy" },
 //   },
 // }
+
 let sessions
 
 
-const SOCKET_URL = "http://localhost:5000/"; // Updated port to match
-const TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJlbWFpbCI6InB1bmtAZ21haWwuY29tIiwidXNlcklkIjoiNjZkNDQ0ZWZkNDQ0MWE4ZDcyMzNlYmFlIiwiaWF0IjoxNzMwMjMwMDUwLCJleHAiOjE3MzE1MjYwNTB9.jzC4iEYC0D9IEJpAyKDnePK7eUU5mtrSuC_UMSwXYMA"
-
-const socket = io(SOCKET_URL, {
-  extraHeaders: {
-    'Authorization': TOKEN
-    // 'Custom-Header': 'custom-value'
-  }
-});
-
 function App() {
+  
+  const SOCKET_URL = "http://localhost:5000/"; // Updated port to match
+const { token } = useLogin();
+const [socket, setSocket] = useState(null);
+
+// Initialize socket connection
+useEffect(() => {
+  const newSocket = io(SOCKET_URL, {
+    extraHeaders: {
+      'Authorization': token
+    }
+  });
+  setSocket(newSocket);
+
+  // Cleanup on unmount
+  return () => {
+    if (newSocket) newSocket.disconnect();
+  };
+}, [token]); // Only re-run if token changes
+
+// Move all socket event listeners to a separate useEffect that depends on socket
+useEffect(() => {
+  if (!socket) return; // Guard clause if socket isn't initialized yet
+
+  // Handle joining room confirmation
+  socket.on("joinedRoom", () => {
+    setIsInLobby(true);
+    setShowStartButton(true);
+  });
+
+  // Handle user list updates
+  socket.on("roomUsers", (users) => {
+    sessions = users
+    setUsers(users);
+    // console.log(sessions)
+  });
+
+  // Handle receiving a new question
+  socket.on("newQuestion", (question) => {
+    setQuestion(question.question);
+    setPingMessage(""); // Clear previous ping message
+    setIsInLobby(false);
+  });
+
+  // Handle ping notifications
+  socket.on("pinged", (message) => {
+    console.log(message);
+    setPingMessage(message.toString());
+  });
+
+  // Handle timer updates
+  socket.on("timerUpdate", (timeLeft) => {
+    setTimeLeft(timeLeft);
+  });
+
+  socket.on("card-used", (text)=>{
+    console.log("-------------card-used------------")
+  })    
+  // Handle game over notifications
+  socket.on("gameOver", (message) => {
+    alert(message);
+    window.location.reload(); // Reload the page to restart the game
+  });
+
+  // Add new listener for score updates
+  socket.on("scoreUpdate", (updatedUsers) => {
+    setUsers(updatedUsers);
+  });
+
+  socket.on("onAnswer", (updatedUsers) => {
+    setUsers(updatedUsers);
+  });
+
+  return () => {
+    socket.off("joinedRoom");
+    socket.off("roomUsers");
+    socket.off("newQuestion");
+    socket.off("pinged");
+    socket.off("timerUpdate");
+    socket.off("gameOver");
+    socket.off("scoreUpdate");
+    socket.off("onAnswer");
+  };
+}, [socket]);
+
   const [username, setUsername] = useState("");
   const [roomId, setRoomId] = useState("");
   const [isInLobby, setIsInLobby] = useState(true);
@@ -100,12 +178,11 @@ function App() {
 
   // Function to join a room
   const joinRoom = () => {
+    if (!socket) return;
     if (username && roomId) {
       socket.emit("joinRoom", {username, sessionId:roomId});
-      console.log("Yipppie")
+      console.log("Room Joined")
       socket.emit("isReadyNow", {sessionId:roomId})
-
-      // socket.emit("use-card", card, roomId, "66d444efd4441a8d7233ebae", sessions)
     } else {
       alert("Please enter both username and room ID");
     }
@@ -118,13 +195,16 @@ function App() {
   //Function to emit useAbility event
   const useAbility = ()=>{
     socket.emit("startGame", roomId);
-    socket.emit("use-card", card, roomId,"66d444efd4441a8d7233ebae", sessions)
+    socket.emit("use-card", card1, roomId,"66d444efd4441a8d7233ebae", sessions)
   }
 
   const onAnswer = ()=>{
     socket.emit("onAnswer", {sessionId:roomId, answer:true})
   }
 
+  const onIncorrectAnswer = ()=>{
+    socket.emit("onAnswer", {sessionId:roomId, answer:false})
+  }
   // Ping button handler
   const handlePing = () => {
     socket.emit("pingButton", roomId, {
@@ -132,61 +212,11 @@ function App() {
       message: "You've been pinged!",
     });
   };
-   
-  useEffect(() => {
-    // Handle joining room confirmation
-    socket.on("joinedRoom", () => {
-      setIsInLobby(true);
-      setShowStartButton(true);
-    });
-
-    // Handle user list updates
-    socket.on("roomUsers", (users) => {
-      sessions = users
-      setUsers(users);
-      // console.log(sessions)
-    });
-
-    // Handle receiving a new question
-    socket.on("newQuestion", (question) => {
-      setQuestion(question.question);
-      setPingMessage(""); // Clear previous ping message
-      setIsInLobby(false);
-    });
-
-    // Handle ping notifications
-    socket.on("pinged", (message) => {
-      console.log(message);
-      setPingMessage(message.toString());
-    });
-
-    // Handle timer updates
-    socket.on("timerUpdate", (timeLeft) => {
-      setTimeLeft(timeLeft);
-    });
-
-    socket.on("card-used", (text)=>{
-      console.log("-------------card-used------------")
-    })    
-    // Handle game over notifications
-    socket.on("gameOver", (message) => {
-      alert(message);
-      window.location.reload(); // Reload the page to restart the game
-    });
-
-    return () => {
-      socket.off("joinedRoom");
-      socket.off("roomUsers");
-      socket.off("newQuestion");
-      socket.off("pinged");
-      socket.off("timerUpdate");
-      socket.off("gameOver");
-    };
-  }, []);
 
   return (
     <div className="App">
       <h1>Welcome to the Quiz Game!</h1>
+      <h2>{token || "NOT SET"}</h2>
       <div id="lobby" style={{ display: isInLobby ? "block" : "none" }}>
         <input
           type="text"
@@ -212,11 +242,15 @@ function App() {
         )}
         <ul id="userList">
           {users?.users?.map((user, index) => (
-            <li key={index}>{user.username}</li>
+            <li key={index}>
+              {user.username} - Score: {user.score || 0}
+            </li>
           ))}
         </ul>
         <button onClick= {useAbility}>Use Ability</button>
         <button onClick= {onAnswer}>Answer</button>
+        <button onClick= {onIncorrectAnswer}>Incorrect Answer</button>
+          <Login />
       </div>
       <div id="game" style={{ display: isInLobby ? "none" : "block" }}>
         <h2 id="question">{question}</h2>
